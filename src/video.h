@@ -17,7 +17,10 @@ void
 parse_frames(char *video_buffer, char **video_map);
 
 int
-get_number_of_frames(char *video_buffer);
+get_number_of_distinct_frames(char *video_buffer);
+
+int
+get_number_of_frames(char **video_map, int distinct);
 
 void
 get_time_to_display(char **video_map, int frame_idx, int *time_to_display);

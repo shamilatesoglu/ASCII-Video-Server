@@ -30,10 +30,24 @@ parse_frames(char *video_buffer, char **video_map)
 }
 
 int
-get_number_of_frames(char *video_buffer)
+get_number_of_distinct_frames(char *video_buffer)
 {
     int line_count = count_substring(video_buffer, "\n");
     return line_count / (VIDEO_HEIGHT + 1);
+}
+
+int
+get_number_of_frames(char **video_map, int distinct)
+{
+    int frame_count = 0;
+    for (int i = 0; i < distinct; i++)
+    {
+        int time_to_display;
+        get_time_to_display(video_map, i, &time_to_display);
+        frame_count += time_to_display;
+    }
+
+    return frame_count;
 }
 
 void

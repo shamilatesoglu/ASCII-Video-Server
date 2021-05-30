@@ -101,26 +101,17 @@ start_serving(int port, char *video_file_path)
         {
             read_in(connect_d, buffer, sizeof(buffer));
             printf("Received: %s\n", buffer);
-            if (count_substring(buffer, "FORMAT"))
+            if (count_substring(buffer, "INFO"))
             {
                 char response[255];
-                sprintf(response, "%dx%d %d", VIDEO_WIDTH, VIDEO_HEIGHT, get_number_of_frames(video_buffer));
+                int n_distinct =  get_number_of_distinct_frames(video_buffer);
+                sprintf(response, "%dx%d %d\n", VIDEO_WIDTH, VIDEO_HEIGHT, n_distinct);
                 write_out(connect_d, response);
-            }
-            else if (count_substring(buffer, "TIME "))
-            {
-                int frame_i;
-                if (sscanf(buffer, "TIME %d", &frame_i) == 1)
-                {
+                for (int frame_i = 0; frame_i < n_distinct; frame_i++) {
                     int time_to_display;
                     get_time_to_display(video_map, frame_i, &time_to_display);
-                    char response[10];
-                    sprintf(response, "%d", time_to_display);
+                    sprintf(response, "%d\n", time_to_display);
                     write_out(connect_d, response);
-                }
-                else
-                {
-                    write_out(connect_d, "Unrecognized command.");
                 }
             }
             else if (count_substring(buffer, "GET"))
