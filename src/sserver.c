@@ -39,16 +39,16 @@ static int listener_d;
 int
 main(int argc, char *argv[])
 {
-    const rlim_t kStackSize = 16 * 1024 * 1024;   // min stack size = 16 MB
+    const rlim_t stack_size = 16 * 1024 * 1024;   // min stack size = 16 MB
     struct rlimit rl;
     int result;
 
     result = getrlimit(RLIMIT_STACK, &rl);
     if (result == 0)
     {
-        if (rl.rlim_cur < kStackSize)
+        if (rl.rlim_cur < stack_size)
         {
-            rl.rlim_cur = kStackSize;
+            rl.rlim_cur = stack_size;
             result = setrlimit(RLIMIT_STACK, &rl);
             if (result != 0)
             {
@@ -61,6 +61,12 @@ main(int argc, char *argv[])
     memset(&action, 0, sizeof(action));
     action.sa_handler = handle_sigterm;
     sigaction(SIGTERM, &action, NULL);
+
+    struct sigaction sigchld_action = {
+        .sa_handler = SIG_DFL,
+        .sa_flags = SA_NOCLDWAIT
+    };
+    sigaction(SIGCHLD, &sigchld_action, NULL);
 
     int port = 443;
     char *video_file_paths[CHANNEL_COUNT];
@@ -133,9 +139,9 @@ start_serving(int port, char **video_file_paths)
         int connect_d = accept(listener_d, (struct sockaddr *) &client_addr, &address_size);
         if (connect_d == -1)
         {
-            error("Can't open client socket");
+            error("Can't open c lient socket");
         }
-        if (!fork())
+        if (fork() == 0)
         {
             read_in(connect_d, buffer, sizeof(buffer));
             printf("Received: %s\n", buffer);
