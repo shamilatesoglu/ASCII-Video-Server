@@ -1,3 +1,5 @@
+#include <sys/resource.h>
+
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -9,8 +11,9 @@
 #include "string_utils.h"
 #include "video.h"
 
+
 void
-start_serving(int port, char *video_file_path);
+start_serving(int port, char **video_file_paths);
 
 void
 error(char *msg);
@@ -36,13 +39,35 @@ static int listener_d;
 int
 main(int argc, char *argv[])
 {
+    const rlim_t kStackSize = 16 * 1024 * 1024;   // min stack size = 16 MB
+    struct rlimit rl;
+    int result;
+
+    result = getrlimit(RLIMIT_STACK, &rl);
+    if (result == 0)
+    {
+        if (rl.rlim_cur < kStackSize)
+        {
+            rl.rlim_cur = kStackSize;
+            result = setrlimit(RLIMIT_STACK, &rl);
+            if (result != 0)
+            {
+                fprintf(stderr, "setrlimit returned result = %d\n", result);
+            }
+        }
+    }
+
     struct sigaction action;
     memset(&action, 0, sizeof(action));
     action.sa_handler = handle_sigterm;
     sigaction(SIGTERM, &action, NULL);
 
     int port = 443;
-    char *video_file_path;
+    char *video_file_paths[CHANNEL_COUNT];
+    for (int ch = 0; ch < CHANNEL_COUNT; ch++)
+    {
+        video_file_paths[ch] = "\0";
+    }
 
     // Parse command line params
     for (int i = 0; i < argc; i++)
@@ -53,23 +78,36 @@ main(int argc, char *argv[])
         }
         else if (EQUALS(argv[i], "-ch1"))
         {
-            video_file_path = argv[i + 1];
+            video_file_paths[0] = argv[i + 1];
+        }
+        else if (EQUALS(argv[i], "-ch2"))
+        {
+            video_file_paths[1] = argv[i + 1];
+        }
+        else if (EQUALS(argv[i], "-ch3"))
+        {
+            video_file_paths[2] = argv[i + 1];
         }
     }
 
-    start_serving(port, video_file_path);
+    start_serving(port, video_file_paths);
     return 0;
 }
 
 void
-start_serving(int port, char *video_file_path)
+start_serving(int port, char **video_file_paths)
 {
     // Read video file.
-    char video_buffer[MAX_VIDEO_BYTES];
-    read_file(video_file_path, video_buffer);
-
-    char *video_map[MAX_FRAME_COUNT];
-    parse_frames(video_buffer, video_map);
+    char video_buffers[CHANNEL_COUNT][MAX_VIDEO_BYTES];
+    char *video_map[CHANNEL_COUNT][MAX_FRAME_COUNT];
+    for (int ch = 0; ch < CHANNEL_COUNT; ch++)
+    {
+        if (strlen(video_file_paths[ch]) > 0)
+        {
+            read_file(video_file_paths[ch], video_buffers[ch]);
+            parse_frames(video_buffers[ch], video_map[ch]);
+        }
+    }
 
 
     // Open socket.
@@ -103,27 +141,43 @@ start_serving(int port, char *video_file_path)
             printf("Received: %s\n", buffer);
             if (count_substring(buffer, "INFO"))
             {
-                char response[255];
-                int n_distinct =  get_number_of_distinct_frames(video_buffer);
-                sprintf(response, "%dx%d %d\n", VIDEO_WIDTH, VIDEO_HEIGHT, n_distinct);
-                write_out(connect_d, response);
-                for (int frame_i = 0; frame_i < n_distinct; frame_i++) {
-                    int time_to_display;
-                    get_time_to_display(video_map, frame_i, &time_to_display);
-                    sprintf(response, "%d\n", time_to_display);
+                int channel;
+                if (sscanf(buffer, "INFO %d", &channel) == 1)
+                {
+                    int ch = channel - 1;
+                    char response[255];
+                    int n_distinct = get_number_of_distinct_frames(video_buffers[ch]);
+                    sprintf(response, "%dx%d %d\n", VIDEO_WIDTH, VIDEO_HEIGHT, n_distinct);
                     write_out(connect_d, response);
+                    for (int frame_i = 0; frame_i < n_distinct; frame_i++)
+                    {
+                        int time_to_display;
+                        get_time_to_display(video_map[ch], frame_i, &time_to_display);
+                        sprintf(response, "%d\n", time_to_display);
+                        write_out(connect_d, response);
+                    }
+                }
+                else
+                {
+                    write_out(connect_d, "Unrecognized command.\n");
+                    printf("Unrecognized command: %s\n", buffer);
                 }
             }
             else if (count_substring(buffer, "GET"))
             {
                 int frame_i;
-                if (sscanf(buffer, "GET %d", &frame_i) == 1)
+                int channel;
+                if (sscanf(buffer, "GET %d/%d", &channel, &frame_i) == 2)
                 {
+                    int ch = channel - 1;
                     char frame[(VIDEO_WIDTH + 2) * VIDEO_HEIGHT + 1];
-                    framecast(video_map, frame_i, frame);
+                    framecast(video_map[ch], frame_i, frame);
                     write_out(connect_d, frame);
-                } else {
-                    write_out(connect_d, "Unrecognized command.");
+                }
+                else
+                {
+                    write_out(connect_d, "Unrecognized command.\n");
+                    printf("Unrecognized command: %s\n", buffer);
                 }
             }
             close(connect_d);

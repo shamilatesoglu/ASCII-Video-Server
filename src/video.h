@@ -7,11 +7,11 @@
 
 #define VIDEO_WIDTH 67
 #define VIDEO_HEIGHT 13
-#define VIDEO_FPS 20
-#define MAX_DURATION_IN_SECONDS 180
-#define MAX_FRAME_COUNT (VIDEO_FPS * MAX_DURATION_IN_SECONDS)
+#define MAX_FRAME_COUNT 3500
 
 #define MAX_VIDEO_BYTES ((VIDEO_WIDTH + 2) * (VIDEO_HEIGHT + 1) * MAX_FRAME_COUNT + 1)  // 67 x 13 resolution, 20 fps, 20 seconds.
+
+#define CHANNEL_COUNT 3
 
 void
 parse_frames(char *video_buffer, char **video_map);
