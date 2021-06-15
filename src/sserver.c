@@ -60,6 +60,7 @@ main(int argc, char *argv[])
     struct sigaction action;
     memset(&action, 0, sizeof(action));
     action.sa_handler = handle_sigterm;
+    sigaction(SIGINT, &action, NULL);
     sigaction(SIGTERM, &action, NULL);
 
     struct sigaction sigchld_action = {
@@ -276,6 +277,6 @@ handle_sigterm(int sig)
     {
         close(listener_d);
     }
-    fprintf(stderr, "Shutting down server.\n");
+    fprintf(stderr, "\nServer is shutting down.\n");
     exit(0);
 }
